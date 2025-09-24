@@ -653,6 +653,9 @@ def delete_product(product_id):
     
     return jsonify({'success': True, 'message': '产品规格删除成功'})
 
+# Vercel兼容性
+application = app
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
