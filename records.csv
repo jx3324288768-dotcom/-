@@ -1,0 +1,3 @@
+date,name,position,product,process,theoretical_runtime,actual_runtime,single_time,theoretical_qty,actual_qty,total_weight,unit_weight,tare_weight,capacity_rate,time_rate,downtime_duration,adjustment_time,adjustment_master
+2025-09-18,钟远涛,操作员,12312,1312,460,450,10,2700,2099,21000,10,10,77.74%,97.83%,10,20,黄光涛
+2025-09-18,钟远涛,操作员,12,23,470,370,10,2220,209,2100,10,10,9.41%,78.72%,100,10,冯伟忠

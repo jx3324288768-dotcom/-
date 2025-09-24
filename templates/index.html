@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>阳昶产量记录管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .comment-indicator {
+            color: #007bff;
+            cursor: pointer;
+            user-select: none;
+        }
+        .comment-indicator:hover {
+            color: #0056b3;
+            font-size: 1.1em;
+        }
+        .comment-popup {
+            position: absolute;
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 5px;
+            padding: 10px;
+            max-width: 300px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .editable {
+            cursor: pointer;
+        }
+        .editable:hover {
+            background-color: #f8f9fa;
+        }
+        .table-responsive {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        /* 拖动模态框样式 */
+        .modal-dialog.dragging {
+            transition: none !important;
+        }
+        
+        .modal-header {
+            user-select: none;
+        }
+        .filter-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .stats-section {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="d-flex align-items-center justify-content-between my-4">
+            <img src="/static/che_logo.png" alt="CHE Logo" style="height: 60px;">
+            <h1 class="mb-0">阳昶产量记录管理系统</h1>
+            <div style="width: 60px;"></div> <!-- 占位符，保持标题居中 -->
+        </div>
+        
+        <!-- 系统管理区域 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4 class="mb-3">系统管理</h4>
+                <div class="row">
+                    <div class="col-md-2">
+                        <button class="btn btn-info btn-lg w-100" onclick="openEmployeeManagement()">员工管理</button>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-success btn-lg w-100" onclick="openProcessManagement()">工序管理</button>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-secondary btn-lg w-100" onclick="openProductManagement()">产品规格管理</button>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-warning btn-lg w-100" onclick="openProductionPlanning()">产量计划</button>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-lg w-100" onclick="exportToExcel()">
+                            <i class="fas fa-file-excel me-2"></i>导出数据
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加记录区域 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>添加记录</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-2">
+                                <input type="date" id="newRecordDate" class="form-control" value="">
+                            </div>
+                            <div class="col-md-2">
+                                <select id="newRecordName" class="form-select">
+                                    <option value="">选择姓名</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="text" id="newRecordPosition" class="form-control" placeholder="职位" readonly>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="dropdown">
+                                    <input type="text" id="newRecordProductSearch" class="form-control" placeholder="搜索产品规格..." 
+                                           onkeyup="searchProductOptions()" onfocus="showProductDropdown()" 
+                                           onblur="hideProductDropdown()" autocomplete="off">
+                                    <div id="productDropdown" class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;">
+                                        <!-- 产品规格选项将在这里动态加载 -->
+                                    </div>
+                                </div>
+                                <input type="hidden" id="newRecordProduct" onchange="loadProductionPlanInfo(this.value)">
+                            </div>
+                            <div class="col-md-2">
+                                <select id="newRecordProcess" class="form-select">
+                                    <option value="">选择工序</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-success" onclick="addRecord()">添加记录</button>
+                            </div>
+                        </div>
+                        <!-- 产量计划信息显示区域 -->
+                        <div id="productionPlanInfo" class="row mt-3" style="display: none;">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <h6>产量计划配置：</h6>
+                                    <div id="productionPlanDetails"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 筛选区域 -->
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-2">
+                    <label>日期范围</label>
+                    <input type="date" id="filterStartDate" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label>到</label>
+                    <input type="date" id="filterEndDate" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label>姓名</label>
+                    <select id="filterName" class="form-select">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label>产品规格</label>
+                    <select id="filterProduct" class="form-select" onchange="loadProductionPlanInfoForFilter(this.value)">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label>工序</label>
+                    <select id="filterProcess" class="form-select">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label>调机师傅</label>
+                    <select id="filterAdjustmentMaster" class="form-select">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-info" onclick="applyFilters()">筛选</button>
+                    <button class="btn btn-secondary" onclick="clearFilters()">清除</button>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-danger" onclick="toggleBatchDelete()">
+                        <i class="fas fa-trash me-1"></i>批量删除
+                    </button>
+                    <button class="btn btn-success" onclick="selectAllRecords()" style="display: none;" id="selectAllBtn">
+                        <i class="fas fa-check-square me-1"></i>全选
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 筛选时的产量计划信息显示区域 -->
+        <div id="filterProductionPlanInfo" class="row mb-3" style="display: none;">
+            <div class="col-12">
+                <div class="alert alert-success">
+                    <h6>当前产品规格的产量计划配置：</h6>
+                    <div id="filterProductionPlanDetails"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="stats-section">
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>合计实际数量: <span id="totalActualQty">0</span></strong>
+                </div>
+                <div class="col-md-3">
+                    <strong>平均产能稼动率: <span id="avgCapacityRate">0.00%</span></strong>
+                </div>
+                <div class="col-md-3">
+                    <strong>平均时间稼动率: <span id="avgTimeRate">0.00%</span></strong>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-warning" onclick="refreshData()">刷新数据</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="display: none;" id="checkboxHeader">
+                            <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                        </th>
+                        <th>日期</th>
+                        <th>姓名</th>
+                        <th>职位</th>
+                        <th>产品规格</th>
+                        <th>工序</th>
+                        <th>理论运行时长(分钟)</th>
+                        <th>实际运行时长(分钟)</th>
+                        <th>单个时间(秒)</th>
+                        <th>理论数量</th>
+                        <th>实际数量</th>
+                        <th>总重</th>
+                        <th>单重</th>
+                        <th>去皮重量</th>
+                        <th>产能稼动率</th>
+                        <th>时间稼动率</th>
+                        <th>异常停机时长(分钟)</th>
+                        <th>计划停机时长(分钟)</th>
+                        <th>调机师傅</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="recordsTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 编辑模态框 -->
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="cursor: move;" id="editModalHeader">
+                    <h5 class="modal-title">编辑记录</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editForm">
+                        <input type="hidden" id="editRecordId">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">日期</label>
+                                <input type="date" id="editDate" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">姓名</label>
+                                <select id="editName" class="form-select">
+                                    <option value="">选择姓名</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">职位</label>
+                                <input type="text" id="editPosition" class="form-control" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">产品规格</label>
+                                <input type="text" id="editProduct" class="form-control">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">工序</label>
+                                <select id="editProcess" class="form-select">
+                                    <option value="">选择工序</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">单个时间(秒)</label>
+                                <input type="number" id="editSingleTime" class="form-control">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">实际数量</label>
+                                <input type="number" id="editActualQty" class="form-control" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">总重</label>
+                                <input type="number" id="editTotalWeight" class="form-control" step="0.01">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">单重</label>
+                                <input type="number" id="editUnitWeight" class="form-control" step="0.01">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">去皮重量</label>
+                                <input type="number" id="editTareWeight" class="form-control" step="0.01">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">异常停机时长(分钟)</label>
+                                <input type="number" id="editDowntimeDuration" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">计划停机时长(分钟)</label>
+                                <input type="number" id="editAdjustmentTime" class="form-control">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">调机师傅</label>
+                                <select id="editAdjustmentMaster" class="form-select">
+                                    <option value="">选择调机师傅</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveRecord()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 注释模态框 -->
+    <div class="modal fade" id="commentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑注释</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="commentText" class="form-control" rows="5" placeholder="输入注释内容..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveComment()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 工序管理模态框 -->
+    <div class="modal fade" id="processManagementModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">工序管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 添加工序区域 -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>添加工序</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <input type="text" id="newProcessName" class="form-control" placeholder="工序名称">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <input type="text" id="newProcessDescription" class="form-control" placeholder="工序描述">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <button class="btn btn-success" onclick="addProcess()">添加工序</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 搜索和列表区域 -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <input type="text" id="processSearchInput" class="form-control" placeholder="搜索工序名称或描述...">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary" onclick="searchProcesses()">搜索</button>
+                            <button class="btn btn-secondary" onclick="clearProcessSearch()">清除</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>工序名称</th>
+                                    <th>描述</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="processManagementList">
+                                <!-- 工序列表将在这里动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 员工管理模态框 -->
+    <div class="modal fade" id="employeeManagementModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">员工管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 添加员工区域 -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>添加员工</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <input type="text" id="newEmployeeName" class="form-control" placeholder="姓名">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <input type="text" id="newEmployeePosition" class="form-control" placeholder="职位">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <button class="btn btn-primary" onclick="addEmployee()">添加员工</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 搜索和列表区域 -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <input type="text" id="employeeSearchInput" class="form-control" placeholder="搜索员工姓名或职位...">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary" onclick="searchEmployees()">搜索</button>
+                            <button class="btn btn-secondary" onclick="clearEmployeeSearch()">清除</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>姓名</th>
+                                    <th>职位</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeManagementList">
+                                <!-- 员工列表将在这里动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 产量计划模态框 -->
+    <div class="modal fade" id="productionPlanningModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">产量计划</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <input type="text" id="productionSearchInput" class="form-control" placeholder="搜索产品规格...">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary" onclick="searchProductionPlans()">搜索</button>
+                            <button class="btn btn-secondary" onclick="clearProductionSearch()">清除</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 500px;">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>产品规格</th>
+                                    <th>工序配置</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productionPlanningList">
+                                <!-- 产量计划列表将在这里动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 产品规格管理模态框 -->
+    <div class="modal fade" id="productManagementModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">产品规格管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 添加产品规格表单 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <input type="text" id="newProductName" class="form-control" placeholder="产品规格名称">
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" id="newProductDescription" class="form-control" placeholder="产品规格描述">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" onclick="addProduct()">添加</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 搜索框 -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <input type="text" id="productSearchInput" class="form-control" placeholder="搜索产品规格..." onkeyup="searchProducts()">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-secondary" onclick="clearProductSearch()">清除搜索</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 产品规格列表 -->
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>产品规格名称</th>
+                                    <th>描述</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productManagementList">
+                                <!-- 产品规格列表将在这里动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="static/app.js"></script>
+</body>
+</html>
